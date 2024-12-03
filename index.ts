@@ -7,35 +7,45 @@ import Client, {
 } from "@triton-one/yellowstone-grpc";
 import { Message, CompiledInstruction } from "@triton-one/yellowstone-grpc/dist/grpc/solana-storage";
 import { ClientDuplexStream } from '@grpc/grpc-js';
-import { Connection, Keypair, PublicKey } from '@solana/web3.js';
+import { Connection, Keypair, PublicKey, SystemProgram, TokenBalance } from '@solana/web3.js';
 import bs58 from 'bs58';
 import { Stream } from "stream";
 import buyToken from "./pumputils/utils/buyToken";
 import dotenv from 'dotenv';
+import fs from 'fs';
 
 dotenv.config()
 
 // Constants
-const ENDPOINT = "https://grpc.solanavibestation.com";
-const TOKEN = "2550b49c90f95efa805508bb77231b58";
+const ENDPOINT = process.env.GRPC_ENDPOINT!;
+const TOKEN = process.env.GRPC_TOKEN!;
 const PUMP_FUN_PROGRAM_ID = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P';
 const PUMP_FUN_CREATE_IX_DISCRIMINATOR = Buffer.from([24, 30, 200, 40, 5, 28, 7, 119]);
+const PUMP_FUN_BUY_IX_DISCRIMINATOR = Buffer.from([102, 6, 61, 18, 1, 218, 235, 234]);
 const COMMITMENT = CommitmentLevel.PROCESSED;
 
-console.log('process.env.WEBSOCKET_RPC_ENDPOINT => ', process.env.WEBSOCKET_RPC_ENDPOINT)
-
-const solanaConnection = new Connection(process.env.RPC_ENDPOINT! , 'confirmed');
+const solanaConnection = new Connection(process.env.RPC_ENDPOINT!, 'confirmed');
 const keypair = Keypair.fromSecretKey(bs58.decode(process.env.PRIVATE_KEY!));
 const amount = process.env.BUY_AMOUNT;
 
-console.log(process.env.RPC_ENDPOINT);
-console.log(keypair.publicKey.toBase58());
-console.log(amount)
+const TARGET_ADDRESS = process.env.TARGET_ADDRESS!;
+const PURCHASE_PERCENT = Number(process.env.PURCHASE_PERCENT!);
+const MAX_LIMIT = Number(process.env.MAX_LIMIT!);
+
+if(!TARGET_ADDRESS) console.log('Target Address is not defined')
+
+if(!PURCHASE_PERCENT || PURCHASE_PERCENT === 0) console.log("Purchase percent is not defined");
+if(!MAX_LIMIT || MAX_LIMIT === 0) console.log("Max Limit is not defined");
+
+console.log('========================================= Your Config =======================================')
+console.log('Target Wallet Address =====> ', TARGET_ADDRESS);
+console.log('Purchase Amount Percent =====> ', `${PURCHASE_PERCENT} %`);
+console.log('Max Limit =====> ', `${MAX_LIMIT} SOL \n`);
 
 // Configuration
 const FILTER_CONFIG = {
     programIds: [PUMP_FUN_PROGRAM_ID],
-    instructionDiscriminators: [PUMP_FUN_CREATE_IX_DISCRIMINATOR]
+    instructionDiscriminators: [PUMP_FUN_BUY_IX_DISCRIMINATOR]
 };
 
 const ACCOUNTS_TO_INCLUDE = [{
@@ -75,7 +85,8 @@ function createSubscribeRequest(): SubscribeRequest {
             pumpFun: {
                 accountInclude: FILTER_CONFIG.programIds,
                 accountExclude: [],
-                accountRequired: []
+                accountRequired: [TARGET_ADDRESS],
+                failed: false
             }
         },
         transactionsStatus: {},
@@ -106,11 +117,11 @@ function sendSubscribeRequest(
 function handleStreamEvents(stream: ClientDuplexStream<SubscribeRequest, SubscribeUpdate>): Promise<void> {
     return new Promise<void>((resolve, reject) => {
         stream.on('data', async (data) => {
-           const result = await handleData(data, stream) 
-           if(result){
-            stream.end();
-            process.exit(1)
-           }
+            const result = await handleData(data, stream)
+            if (result) {
+                stream.end();
+                process.exit(1)
+            }
         });
         stream.on("error", (error: Error) => {
             console.error('Stream error:', error);
@@ -146,33 +157,135 @@ async function handleData(data: SubscribeUpdate, stream: ClientDuplexStream<Subs
         return;
     }
 
-    const matchingInstruction = message.instructions.find(matchesInstructionDiscriminator);
-    if (!matchingInstruction) {
+    // const matchingInstruction = message.instructions.find(matchesInstructionDiscriminator);
+    // if (!matchingInstruction) {
+    //     return;
+    // }
+
+    // Check if buy transaction or not
+    const isBuy = checkBuy(data);
+    if (!isBuy) {
         return;
     }
 
-    const formattedSignature = convertSignature(transaction.signature);
-    const formattedData = formatData(message, formattedSignature.base58, data.transaction.slot);
+    // const filePath = './data.json';
 
-    if (formattedData) {
+    // try {
+    //     fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+    //     console.log(`Data written to ${filePath}`);
+    // } catch (error) {
+    //     console.error("Error writing to file:", error);
+    // }
+
+    const formattedSignature = convertSignature(transaction.signature);
+
+    const { mint, accountIndex } = getMintAccount(data);
+
+    if (mint && accountIndex) {
         isStopped = true; // Set the flag to prevent further handling
-        console.log("======================================💊 New Pump.fun Mint Detected!======================================");
-        console.log("Current Time => ", formatDate());
-        console.log("Signature => ", `https://solscan.io/tx/${formattedData.signature}`);
-        console.log("Mint => ", `https://solscan.io/tx/${formattedData.mint.toString()}`);
-        const mintPub = new PublicKey(formattedData.mint.toString());
-        console.time('BuyTime');
-        const sig = await buyToken(mintPub, solanaConnection, keypair, Number(amount), 1);
-        if (sig) {
-            console.log("Buy success => ", `https://solscan.io/tx/${sig}`)
-        } else {
-            console.log("Buy failed!");
-            
+        console.log("======================================💊 New Buy Transaction Detected!======================================");
+        console.log("Signature => ", `https://solscan.io/tx/${formattedSignature.base58}`);
+        const tokenAmount = getBalanceChange(data);
+        const solAmount = getSolChange(data, accountIndex)
+        console.log("Buy Amount => ", getBalanceChange(data))
+        console.log("Detail => ", `Bought ${tokenAmount} of ${mint} token with ${solAmount} sol \n`);
+
+        const buyAmount = solAmount * PURCHASE_PERCENT / 100;
+        const purchase = (Math.floor(buyAmount * 10 ** 9)) / 10 ** 9;
+        console.log("🚀 ~ handleData ~ purchase:", purchase)
+        if (purchase > MAX_LIMIT) {
+            console.log("Going to skip this transaction!")
+            return true
         }
-        console.timeEnd('BuyTime')
-        console.log("\n");
-        return true;
+        console.log("Going to start buy ", `${mint} token of ${purchase} sol`);
+
+        const mint_pub = new PublicKey(mint);
+        const sig = await buyToken(mint_pub, solanaConnection, keypair, purchase, 1);
+
+        if (sig) {
+            console.log('Buy success ===> ', `https://solscan.io/tx/${sig}`);
+        } else {
+            console.log("Buy failed!")
+        }
     }
+
+    return true;
+}
+
+// Check token balance change of target wallet
+const getBalanceChange = (data: SubscribeUpdate) => {
+    let preBalance = 0;
+    let postBalance = 0;
+    const preAccounts = data.transaction?.transaction?.meta?.preTokenBalances;
+    const postAccounts = data.transaction?.transaction?.meta?.postTokenBalances;
+
+    const preAccount = preAccounts?.filter((account: any, i: number) => {
+        if (account.owner === TARGET_ADDRESS) {
+            return true
+        } else {
+            return false
+        }
+    })
+
+    const postAccount = postAccounts?.filter((account: any, i: number) => {
+        if (account.owner === TARGET_ADDRESS) {
+            return true
+        } else {
+            return false
+        }
+    })
+
+    if (preAccount && preAccount.length !== 0) {
+        preBalance = Number(preAccount[0].uiTokenAmount?.amount)
+    }
+
+    if (postAccount && postAccount.length !== 0) {
+        postBalance = Number(postAccount[0].uiTokenAmount?.amount)
+    }
+
+    return (postBalance - preBalance) / 10 ** 6
+}
+
+// Check buy transaction
+const checkBuy = (data: SubscribeUpdate) => {
+    const isBuy = data.transaction?.transaction?.meta?.logMessages.toString().includes('Program log: Instruction: Buy');
+    if (isBuy) {
+        return true
+    } else {
+        false
+    }
+}
+
+// Get Token mint
+const getMintAccount = (data: SubscribeUpdate) => {
+    const tokenAccount = data.transaction?.transaction?.meta?.preTokenBalances.filter((preToken) => {
+        if (preToken.accountIndex === 1) {
+            return false
+        } else {
+            return true
+        }
+    })
+    if (tokenAccount && tokenAccount.length !== 0) {
+        return {
+            mint: tokenAccount[0].mint,
+            accountIndex: tokenAccount[0].accountIndex
+        }
+    } else {
+        return {
+            mint: null,
+            accountIndex: null
+        }
+    }
+}
+
+// Get sol balance change of target wallet
+const getSolChange = (data: SubscribeUpdate, accountIndex: number) => {
+    const preSolBalance = data.transaction?.transaction?.meta?.preBalances[accountIndex - 1];
+    const postBalance = data.transaction?.transaction?.meta?.postBalances[accountIndex - 1];
+
+    const change = (Number(postBalance) - Number(preSolBalance)) / 10 ** 9;
+
+    return change
 }
 
 export function formatDate() {
@@ -212,8 +325,6 @@ function formatData(message: Message, signature: string, slot: string): Formatte
         return undefined;
     }
 
-    const newSig = `https://solscan.io/tx/${signature}`
-
     const accountKeys = message.accountKeys;
     const includedAccounts = ACCOUNTS_TO_INCLUDE.reduce<Record<string, string>>((acc, { name, index }) => {
         const accountIndex = matchingInstruction.accounts[index];
@@ -225,7 +336,7 @@ function formatData(message: Message, signature: string, slot: string): Formatte
     const mint = includedAccounts['mint']
 
     return {
-        signature: newSig,
+        signature: signature,
         slot,
         mint
     };

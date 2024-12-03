@@ -4,7 +4,7 @@ export default async function getBondingCurveTokenAccountWithRetry(
   connection: web3.Connection,
   bondingCurve: web3.PublicKey,
   maxRetries = 5,
-  retryDelay = 1000
+  retryDelay = 100
 ) {
   let accountInfo: web3.AccountInfo<Buffer> | null = null;
   let retries = 0;
@@ -18,7 +18,7 @@ export default async function getBondingCurveTokenAccountWithRetry(
     }
 
     retries++;
-    // await wait(retryDelay);
+    await wait(retryDelay);
   }
 
   if (!accountInfo) {
