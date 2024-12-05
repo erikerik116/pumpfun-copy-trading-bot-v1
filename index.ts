@@ -5,14 +5,13 @@ import Client, {
     SubscribeUpdate,
     SubscribeUpdateTransaction,
 } from "@triton-one/yellowstone-grpc";
-import { Message, CompiledInstruction } from "@triton-one/yellowstone-grpc/dist/grpc/solana-storage";
+import { CompiledInstruction } from "@triton-one/yellowstone-grpc/dist/grpc/solana-storage";
 import { ClientDuplexStream } from '@grpc/grpc-js';
-import { Connection, Keypair, PublicKey, SystemProgram, TokenBalance } from '@solana/web3.js';
+import { Connection, Keypair, PublicKey } from '@solana/web3.js';
 import bs58 from 'bs58';
-import { Stream } from "stream";
 import buyToken from "./pumputils/utils/buyToken";
 import dotenv from 'dotenv';
-import fs from 'fs';
+import { formatDate } from "./utils/commonFunc";
 
 dotenv.config()
 
@@ -47,18 +46,6 @@ const FILTER_CONFIG = {
     programIds: [PUMP_FUN_PROGRAM_ID],
     instructionDiscriminators: [PUMP_FUN_BUY_IX_DISCRIMINATOR]
 };
-
-const ACCOUNTS_TO_INCLUDE = [{
-    name: "mint",
-    index: 0
-}];
-
-// Type definitions
-interface FormattedTransactionData {
-    signature: string;
-    slot: string;
-    mint: string;
-}
 
 // Main function
 async function main(): Promise<void> {
@@ -157,25 +144,11 @@ async function handleData(data: SubscribeUpdate, stream: ClientDuplexStream<Subs
         return;
     }
 
-    // const matchingInstruction = message.instructions.find(matchesInstructionDiscriminator);
-    // if (!matchingInstruction) {
-    //     return;
-    // }
-
     // Check if buy transaction or not
     const isBuy = checkBuy(data);
     if (!isBuy) {
         return;
     }
-
-    // const filePath = './data.json';
-
-    // try {
-    //     fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
-    //     console.log(`Data written to ${filePath}`);
-    // } catch (error) {
-    //     console.error("Error writing to file:", error);
-    // }
 
     const formattedSignature = convertSignature(transaction.signature);
 
@@ -183,7 +156,7 @@ async function handleData(data: SubscribeUpdate, stream: ClientDuplexStream<Subs
 
     if (mint && accountIndex) {
         isStopped = true; // Set the flag to prevent further handling
-        console.log("======================================💊 New Buy Transaction Detected!======================================");
+        console.log("======================================💊 New Buy Transaction Detected!======================================", await formatDate());
         console.log("Signature => ", `https://solscan.io/tx/${formattedSignature.base58}`);
         const tokenAmount = getBalanceChange(data);
         const solAmount = getSolChange(data, accountIndex)
@@ -288,21 +261,6 @@ const getSolChange = (data: SubscribeUpdate, accountIndex: number) => {
     return change
 }
 
-export function formatDate() {
-    const options: any = {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        timeZone: 'UTC',
-        timeZoneName: 'short'
-    };
-
-    const now = new Date();
-    return now.toLocaleString('en-US', options);
-}
 
 function isSubscribeUpdateTransaction(data: SubscribeUpdate): data is SubscribeUpdate & { transaction: SubscribeUpdateTransaction } {
     return (
@@ -316,30 +274,6 @@ function isSubscribeUpdateTransaction(data: SubscribeUpdate): data is SubscribeU
 
 function convertSignature(signature: Uint8Array): { base58: string } {
     return { base58: bs58.encode(Buffer.from(signature)) };
-}
-
-function formatData(message: Message, signature: string, slot: string): FormattedTransactionData | undefined {
-    const matchingInstruction = message.instructions.find(matchesInstructionDiscriminator);
-
-    if (!matchingInstruction) {
-        return undefined;
-    }
-
-    const accountKeys = message.accountKeys;
-    const includedAccounts = ACCOUNTS_TO_INCLUDE.reduce<Record<string, string>>((acc, { name, index }) => {
-        const accountIndex = matchingInstruction.accounts[index];
-        const publicKey = accountKeys[accountIndex];
-        acc[name] = new PublicKey(publicKey).toBase58();
-        return acc;
-    }, {});
-
-    const mint = includedAccounts['mint']
-
-    return {
-        signature: signature,
-        slot,
-        mint
-    };
 }
 
 function matchesInstructionDiscriminator(ix: CompiledInstruction): boolean {

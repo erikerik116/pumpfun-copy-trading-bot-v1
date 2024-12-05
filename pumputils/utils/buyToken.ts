@@ -7,13 +7,12 @@ import { AnchorProvider, Program, Wallet } from "@coral-xyz/anchor";
 import { BN } from "bn.js";
 import { PumpFun } from "../idl/pump-fun";
 import IDL from "../idl/pump-fun.json";
-import wait from "./wait";
 import getBondingCurveTokenAccountWithRetry from "./getBondingCurveTokenAccountWithRetry";
-import { Connection, SystemProgram, TransactionMessage } from "@solana/web3.js";
+import { TransactionMessage } from "@solana/web3.js";
 import { executeJitoTx } from "../../utils/jito";
-import { formatDate } from "../..";
+import { formatDate } from "../../utils/commonFunc";
 
-const BOANDING_CURVE_ACC_RETRY_AMOUNT = 20;
+const BOANDING_CURVE_ACC_RETRY_AMOUNT = 50;
 const BOANDING_CURVE_ACC_RETRY_DELAY = 10;
 
 
@@ -34,13 +33,6 @@ async function buyToken(
   priorityFee?: number
 ) {
   try {
-    console.time('timetrack');
-    console.time('1');
-    console.time('2');
-    console.time('3');
-    console.time('4');
-    console.time('5');
-    console.time('6');
     // Load Pumpfun provider
     const provider = new AnchorProvider(connection, new Wallet(keypair), {
       commitment: "processed",
@@ -52,7 +44,6 @@ async function buyToken(
 
     
 
-    console.timeEnd('1');
     // Get/Create token account
     const associatedUser = await token.getAssociatedTokenAddress(mint, keypair.publicKey, false);
 
@@ -95,19 +86,16 @@ async function buyToken(
 
     // request a specific compute unit budget
     const modifyComputeUnits = web3.ComputeBudgetProgram.setComputeUnitLimit({
-      units: 100000,
+      units: 600000,
     });
 
     // set the desired priority fee
     const addPriorityFee = web3.ComputeBudgetProgram.setComputeUnitPrice({
-      microLamports: typeof priorityFee === "number" ? priorityFee * 1000000000 : 0.0001 * 1000000000,
-      // microLamports: 0.005 * 1000000000,
+      microLamports: 0.002 * 1000000000,
+      // microLamports: 1264480,
     });
 
-    console.time('blockhash')
     const latestBlockhash = await connection.getLatestBlockhash()
-    console.timeEnd('blockhash')
-    console.timeEnd('5');
 
     transaction
       .add(modifyComputeUnits)
@@ -130,9 +118,6 @@ async function buyToken(
 
     const isJito = process.env.IS_JITO === 'true';
 
-    
-    console.timeEnd('timetrack');
-
     if (isJito) {
 
       const messageV0 = new TransactionMessage({
@@ -144,18 +129,13 @@ async function buyToken(
       const versionedTx = new web3.VersionedTransaction(messageV0);
       versionedTx.sign([keypair]);
 
-      console.log('executeJito Tx current time => ', formatDate())
-      console.time('executeJitoTx');
       const sig = await executeJitoTx([versionedTx], keypair, 'confirmed');
-      console.timeEnd('executeJitoTx');
       return sig;
 
     } else {
 
-      const stakeConnection = new Connection('https://staked.helius-rpc.com?api-key=e2cc6225-fae1-4f90-a6b1-5684f49dec62', 'confirmed')
-      
-      const txSig = await stakeConnection.sendTransaction(transaction, [keypair], { skipPreflight: true, preflightCommitment: 'confirmed' });
-      const confirmSig = await stakeConnection.confirmTransaction(txSig, 'confirmed');
+      const txSig = await connection.sendTransaction(transaction, [keypair], { skipPreflight: true, preflightCommitment: 'confirmed' });
+      const confirmSig = await connection.confirmTransaction(txSig, 'confirmed');
 
       // console.log('confirm sig => ', confirmSig.value.err);
 

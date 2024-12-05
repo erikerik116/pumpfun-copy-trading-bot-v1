@@ -1,7 +1,7 @@
 {
-  "name": "pumpfun-copy-trading",
+  "name": "pumpfun-copy-trading-bot",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "index.ts",
   "scripts": {
     "start": "ts-node index.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -22,10 +22,13 @@
     "bs58": "^6.0.0",
     "dotenv": "^16.4.5",
     "inquirer": "^12.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "tpu-client": "^1.0.6",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.2"
   },
   "devDependencies": {
-    "@types/bn.js": "^5.1.6"
+    "@types/bn.js": "^5.1.6",
+    "@types/jsonwebtoken": "^9.0.7"
   }
 }
