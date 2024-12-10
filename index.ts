@@ -9,7 +9,6 @@ import { CompiledInstruction } from "@triton-one/yellowstone-grpc/dist/grpc/sola
 import { ClientDuplexStream } from '@grpc/grpc-js';
 import { Connection, Keypair, PublicKey } from '@solana/web3.js';
 import bs58 from 'bs58';
-import buyToken from "./pumputils/utils/buyToken";
 import dotenv from 'dotenv';
 import { formatDate } from "./utils/commonFunc";
 
@@ -173,13 +172,7 @@ async function handleData(data: SubscribeUpdate, stream: ClientDuplexStream<Subs
         console.log("Going to start buy ", `${mint} token of ${purchase} sol`);
 
         const mint_pub = new PublicKey(mint);
-        const sig = await buyToken(mint_pub, solanaConnection, keypair, purchase, 1);
-
-        if (sig) {
-            console.log('Buy success ===> ', `https://solscan.io/tx/${sig}`);
-        } else {
-            console.log("Buy failed!")
-        }
+        // Buy/Sell Funtion
     }
 
     return true;
