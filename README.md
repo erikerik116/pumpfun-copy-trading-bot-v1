@@ -1,4 +1,4 @@
-# 🤖Pumpfun Copy Trading Bot
+# Pumpfun Copy Trading Bot
 
 You can monitor target wallet and copy trade automatically using this bot.
 
@@ -7,17 +7,20 @@ You can monitor target wallet and copy trade automatically using this bot.
 
 If you have any question or something, feel free to reach out me anytime via telegram, discord or twitter.
 <br>
-#### 🌹You're always welcome🌹
 
-Telegram: [@whistle](https://t.me/devbeast5775) <br>
+Discord: @erikerik116 <br>
+
+Telegram: @erikerik116 <br>
+
+twitter: @erikerikerik116 <br>
 
 
 # 👀Usage
 1. Clone the repository
 
     ```
-    git clone https://github.com/whistledev411/pumpfun-copy-trading-bot.git
-    cd pumpfun-copy-trading-bot
+    git clone https://github.com/erikerik116/pumpfun-copy-trading-bot-v1.git
+    cd pumpfun-copy-trading-bot-v1
     ```
 2. Install dependencies
 
