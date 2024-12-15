@@ -1,9 +1,9 @@
 # Pumpfun Copy Trading Bot
 
 You can monitor target wallet and copy trade automatically using this bot.
+A copy trading bot on Solana automatically tracks and mimics the trades of a specific trader's wallet. It monitors the trader's transactions (like buying or selling tokens) and automatically executes the same actions in your wallet in real-time. The bot allows you to follow experienced traders without manually managing trades, copying their buys and sells on the Solana blockchain.
 
-
-# 💬Contact Me
+# Contact Me
 
 If you have any question or something, feel free to reach out me anytime via telegram, discord or twitter.
 <br>
@@ -15,7 +15,7 @@ Telegram: @erikerik116 <br>
 twitter: @erikerikerik116 <br>
 
 
-# 👀Usage
+# Usage
 1. Clone the repository
 
     ```
